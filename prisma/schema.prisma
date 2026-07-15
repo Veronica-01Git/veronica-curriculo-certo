@@ -1,0 +1,149 @@
+// VERONICA - Currículo Certo
+// Schema de dados: usuários, assinaturas e currículos otimizados para ATS.
+// Banco de produção: PostgreSQL (Neon).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum PlanStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+enum ResumeStatus {
+  UPLOADED
+  PARSING
+  OPTIMIZED
+  FAILED
+}
+
+enum TemplateKey {
+  CLASSIC_ATS
+  MODERN_ATS
+  EXECUTIVE_ATS
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  passwordHash  String?
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  resumes       Resume[]
+  subscription  Subscription?
+  passwordResetTokens PasswordResetToken[]
+
+  stripeCustomerId String? @unique
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Token de recuperação de senha ("esqueci minha senha").
+// Armazenamos apenas o hash do token — o valor bruto só existe no link
+// enviado por e-mail, então um vazamento do banco não expõe links válidos.
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+}
+
+model Subscription {
+  id                   String     @id @default(cuid())
+  userId               String     @unique
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubscriptionId String?    @unique
+  stripePriceId        String?
+  status               PlanStatus @default(TRIALING)
+  planName             String     @default("Gratuito")
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean    @default(false)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+}
+
+model Resume {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String       @default("Meu Currículo")
+  status         ResumeStatus @default(UPLOADED)
+  sourceFormat   String // pdf | docx | txt
+  rawText        String? // texto extraído do arquivo original
+  structuredData String? // JSON serializado: ResumeData
+  atsScore       Int? // 0-100
+  targetRole     String?
+  targetJobText  String? // texto da vaga alvo, usado para casar palavras-chave
+  template       TemplateKey  @default(CLASSIC_ATS)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  exports Export[]
+}
+
+model Export {
+  id        String      @id @default(cuid())
+  resumeId  String
+  resume    Resume      @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  format    String // pdf-ats | pdf-visual | docx
+  template  TemplateKey
+  fileName  String
+  createdAt DateTime    @default(now())
+}
