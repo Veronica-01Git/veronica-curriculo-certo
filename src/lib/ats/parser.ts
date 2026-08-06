@@ -1,3 +1,4 @@
+import { getAnthropicClient } from "@/lib/ai/client";
 import type { ResumeData, ResumeExperience, ResumeEducation } from "@/types/resume";
 
 /**
@@ -20,6 +21,101 @@ export async function extractTextFromFile(buffer: Buffer, mimeType: string): Pro
 
   // txt e fallback
   return buffer.toString("utf-8");
+}
+
+/**
+ * JSON Schema bruto (não usa a Zod — o helper zodOutputFormat do SDK exige
+ * Zod v4, e este projeto usa Zod v3 para validação de formulários).
+ */
+const RESUME_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    contact: {
+      type: "object",
+      properties: {
+        fullName: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" },
+        location: { type: "string" },
+        linkedin: { type: "string" },
+        portfolio: { type: "string" },
+      },
+      required: ["fullName"],
+      additionalProperties: false,
+    },
+    summary: { type: "string" },
+    skills: { type: "array", items: { type: "string" } },
+    experiences: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          role: { type: "string" },
+          company: { type: "string" },
+          location: { type: "string" },
+          startDate: { type: "string" },
+          endDate: { type: "string" },
+          bullets: { type: "array", items: { type: "string" } },
+        },
+        required: ["role", "company", "bullets"],
+        additionalProperties: false,
+      },
+    },
+    education: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          degree: { type: "string" },
+          institution: { type: "string" },
+          startDate: { type: "string" },
+          endDate: { type: "string" },
+        },
+        required: ["degree", "institution"],
+        additionalProperties: false,
+      },
+    },
+    certifications: { type: "array", items: { type: "string" } },
+    languages: { type: "array", items: { type: "string" } },
+  },
+  required: ["contact", "summary", "skills", "experiences", "education", "certifications", "languages"],
+  additionalProperties: false,
+} as const;
+
+/**
+ * Estruturador via IA: converte texto bruto de currículo em ResumeData
+ * preservando a ordem original do documento. Requer ANTHROPIC_API_KEY —
+ * lança AiUnavailableError se não estiver configurada (o chamador deve
+ * cair de volta para o heurístico structureResumeText nesse caso).
+ */
+export async function structureResumeWithAi(rawText: string): Promise<ResumeData> {
+  const response = await getAnthropicClient().messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 4096,
+    output_config: { format: { type: "json_schema", schema: RESUME_JSON_SCHEMA } },
+    messages: [
+      {
+        role: "user",
+        content: `Extraia os dados estruturados do currículo abaixo. Regras importantes:
+- Preserve EXATAMENTE a ordem original das experiências profissionais, das conquistas (bullets) de cada experiência e da formação acadêmica — na mesma ordem em que aparecem no texto original. Não reordene por data nem por relevância.
+- Não invente, corrija ou complete informações que não estão no texto.
+- Cada bullet de experiência é uma frase/linha separada, sem numeração nem marcador.
+- Se um campo (telefone, LinkedIn, datas etc.) não existir no texto, deixe de fora.
+
+Texto do currículo:
+"""
+${rawText}
+"""`,
+      },
+    ],
+  });
+
+  const textBlock = response.content.find((block) => block.type === "text");
+  if (textBlock?.type !== "text") {
+    throw new Error("A IA não retornou um currículo estruturado válido.");
+  }
+
+  return JSON.parse(textBlock.text) as ResumeData;
 }
 
 const SECTION_HEADERS: Record<keyof Pick<ResumeData, "summary" | "skills" | "experiences" | "education" | "certifications" | "languages">, RegExp> = {

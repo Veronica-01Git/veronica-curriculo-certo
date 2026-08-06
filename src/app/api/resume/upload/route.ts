@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { extractTextFromFile, structureResumeText } from "@/lib/ats/parser";
+import { extractTextFromFile, structureResumeText, structureResumeWithAi } from "@/lib/ats/parser";
+import type { ResumeData } from "@/types/resume";
 import { analyzeAts } from "@/lib/ats/optimizer";
 
 const ALLOWED_TYPES = new Set([
@@ -49,7 +50,12 @@ export async function POST(req: Request) {
     );
   }
 
-  const structured = structureResumeText(rawText);
+  let structured: ResumeData;
+  try {
+    structured = await structureResumeWithAi(rawText);
+  } catch {
+    structured = structureResumeText(rawText);
+  }
   const analysis = analyzeAts(structured, targetJobText);
 
   const sourceFormat = file.type === "application/pdf" ? "pdf" : file.type.includes("word") ? "docx" : "txt";

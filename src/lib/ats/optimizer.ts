@@ -1,5 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { AiUnavailableError, getAnthropicClient } from "@/lib/ai/client";
 import type { AtsAnalysis, AtsIssue, ResumeData } from "@/types/resume";
+
+export { AiUnavailableError as AiRewriteUnavailableError };
 
 const STOPWORDS = new Set(
   "a o os as de da do das dos em no na nos nas para por com sem um uma uns umas que e ou ao aos à às the of and or to in on for with a an".split(
@@ -152,25 +154,11 @@ export function analyzeAts(resume: ResumeData, targetJobText?: string): AtsAnaly
   return { score, matchedKeywords, missingKeywords, issues };
 }
 
-/** Lançada quando nem ANTHROPIC_API_KEY nem OPENAI_API_KEY estão configuradas. */
-export class AiRewriteUnavailableError extends Error {
-  constructor() {
-    super("Reescrita com IA não configurada: defina ANTHROPIC_API_KEY (ou OPENAI_API_KEY) no .env.");
-    this.name = "AiRewriteUnavailableError";
-  }
-}
-
-let anthropicClient: Anthropic | null = null;
-function getAnthropicClient(): Anthropic {
-  if (!anthropicClient) anthropicClient = new Anthropic();
-  return anthropicClient;
-}
-
 /**
  * Reescrita assistida por IA de uma conquista de currículo (opcional).
  * Usa Anthropic se ANTHROPIC_API_KEY estiver definida, senão OpenAI se
  * OPENAI_API_KEY estiver definida. Sem nenhuma chave configurada, lança
- * AiRewriteUnavailableError — o chamador decide como comunicar isso ao usuário.
+ * AiUnavailableError — o chamador decide como comunicar isso ao usuário.
  */
 export async function rewriteBulletWithAi(bullet: string, targetRole?: string): Promise<string> {
   const prompt = `Reescreva a conquista de currículo abaixo para ser mais objetiva, começar com verbo de ação forte e, quando possível, incluir uma métrica de impacto. Responda apenas com a frase reescrita, sem aspas.\n\nCargo alvo: ${
@@ -205,5 +193,5 @@ export async function rewriteBulletWithAi(bullet: string, targetRole?: string): 
     return data.choices?.[0]?.message?.content?.trim() || bullet;
   }
 
-  throw new AiRewriteUnavailableError();
+  throw new AiUnavailableError();
 }
