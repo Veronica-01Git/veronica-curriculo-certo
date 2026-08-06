@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import type { AtsAnalysis, AtsIssue, ResumeData } from "@/types/resume";
 
 const STOPWORDS = new Set(
@@ -151,11 +152,25 @@ export function analyzeAts(resume: ResumeData, targetJobText?: string): AtsAnaly
   return { score, matchedKeywords, missingKeywords, issues };
 }
 
+/** Lançada quando nem ANTHROPIC_API_KEY nem OPENAI_API_KEY estão configuradas. */
+export class AiRewriteUnavailableError extends Error {
+  constructor() {
+    super("Reescrita com IA não configurada: defina ANTHROPIC_API_KEY (ou OPENAI_API_KEY) no .env.");
+    this.name = "AiRewriteUnavailableError";
+  }
+}
+
+let anthropicClient: Anthropic | null = null;
+function getAnthropicClient(): Anthropic {
+  if (!anthropicClient) anthropicClient = new Anthropic();
+  return anthropicClient;
+}
+
 /**
- * Ponto de extensão para reescrita assistida por IA (opcional).
+ * Reescrita assistida por IA de uma conquista de currículo (opcional).
  * Usa Anthropic se ANTHROPIC_API_KEY estiver definida, senão OpenAI se
- * OPENAI_API_KEY estiver definida. Sem nenhuma chave, retorna o texto
- * original inalterado — o app funciona perfeitamente sem IA externa.
+ * OPENAI_API_KEY estiver definida. Sem nenhuma chave configurada, lança
+ * AiRewriteUnavailableError — o chamador decide como comunicar isso ao usuário.
  */
 export async function rewriteBulletWithAi(bullet: string, targetRole?: string): Promise<string> {
   const prompt = `Reescreva a conquista de currículo abaixo para ser mais objetiva, começar com verbo de ação forte e, quando possível, incluir uma métrica de impacto. Responda apenas com a frase reescrita, sem aspas.\n\nCargo alvo: ${
@@ -163,22 +178,13 @@ export async function rewriteBulletWithAi(bullet: string, targetRole?: string): 
   }\nFrase original: "${bullet}"`;
 
   if (process.env.ANTHROPIC_API_KEY) {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: 200,
-        messages: [{ role: "user", content: prompt }],
-      }),
+    const response = await getAnthropicClient().messages.create({
+      model: "claude-sonnet-5",
+      max_tokens: 200,
+      messages: [{ role: "user", content: prompt }],
     });
-    if (!res.ok) return bullet;
-    const data = (await res.json()) as { content?: { text?: string }[] };
-    return data.content?.[0]?.text?.trim() || bullet;
+    const textBlock = response.content.find((block) => block.type === "text");
+    return (textBlock?.type === "text" ? textBlock.text.trim() : "") || bullet;
   }
 
   if (process.env.OPENAI_API_KEY) {
@@ -194,10 +200,10 @@ export async function rewriteBulletWithAi(bullet: string, targetRole?: string): 
         messages: [{ role: "user", content: prompt }],
       }),
     });
-    if (!res.ok) return bullet;
+    if (!res.ok) throw new Error(`OpenAI respondeu ${res.status}`);
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     return data.choices?.[0]?.message?.content?.trim() || bullet;
   }
 
-  return bullet;
+  throw new AiRewriteUnavailableError();
 }

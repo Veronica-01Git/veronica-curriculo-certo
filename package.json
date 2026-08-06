@@ -16,6 +16,7 @@
     "delete:user": "node scripts/delete-user.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@prisma/client": "^5.20.0",
     "@react-pdf/renderer": "^3.4.4",
     "bcryptjs": "^2.4.3",

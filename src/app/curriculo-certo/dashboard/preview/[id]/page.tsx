@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ScoreGauge } from "@/components/dashboard/ScoreGauge";
 import { ExportPanel } from "@/components/dashboard/ExportPanel";
+import { ExperienceBullets } from "@/components/dashboard/ExperienceBullets";
 
 const ISSUE_TONE = { critical: "critical", warning: "warning", tip: "brand" } as const;
 
@@ -107,20 +108,7 @@ export default async function PreviewPage({
               {data.experiences.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Experiência</p>
-                  <div className="mt-2 space-y-3">
-                    {data.experiences.map((exp, i) => (
-                      <div key={i}>
-                        <p className="font-medium text-ink-950">
-                          {exp.role} — {exp.company}
-                        </p>
-                        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-ink-700">
-                          {exp.bullets.map((b, j) => (
-                            <li key={j}>{b}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
+                  <ExperienceBullets resumeId={resume.id} experiences={data.experiences} />
                 </div>
               )}
             </div>
