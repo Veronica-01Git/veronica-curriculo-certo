@@ -53,7 +53,8 @@ export async function POST(req: Request) {
   let structured: ResumeData;
   try {
     structured = await structureResumeWithAi(rawText);
-  } catch {
+  } catch (err) {
+    console.error("structureResumeWithAi falhou, caindo para o heurístico local:", err);
     structured = structureResumeText(rawText);
   }
   const analysis = analyzeAts(structured, targetJobText);

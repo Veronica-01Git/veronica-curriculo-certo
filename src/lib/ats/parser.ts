@@ -91,7 +91,8 @@ const RESUME_JSON_SCHEMA = {
 export async function structureResumeWithAi(rawText: string): Promise<ResumeData> {
   const response = await getAnthropicClient().messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 4096,
+    max_tokens: 8192,
+    thinking: { type: "disabled" },
     output_config: { format: { type: "json_schema", schema: RESUME_JSON_SCHEMA } },
     messages: [
       {
