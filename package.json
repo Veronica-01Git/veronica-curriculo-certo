@@ -5,6 +5,7 @@
   "description": "VERONICA - Currículo Certo: transforma seu currículo em um PDF otimizado para ATS.",
   "scripts": {
     "dev": "next dev",
+    "postinstall": "prisma generate",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
